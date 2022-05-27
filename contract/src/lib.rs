@@ -12,37 +12,13 @@
  */
 
 use near_contract_standards::fungible_token::core::ext_ft_core;
-use near_contract_standards::fungible_token::metadata::FT_METADATA_SPEC;
+use near_contract_standards::fungible_token::metadata::FungibleTokenMetadata;
 // To conserve gas, efficient serialization is achieved through Borsh (http://borsh.io/)
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedSet;
-use near_sdk::json_types::{Base64VecU8, U128};
-use near_sdk::serde::{Deserialize, Serialize};
+use near_sdk::json_types::U128;
 use near_sdk::serde_json::from_slice;
-use near_sdk::{env, ext_contract, near_bindgen, require, AccountId, Promise, PromiseResult};
-
-// TODO: Determine why I can't import FungibleTokenMetadata directly from near_contract_standards
-#[derive(BorshDeserialize, BorshSerialize, Clone, Deserialize, Serialize)]
-#[serde(crate = "near_sdk::serde")]
-pub struct FungibleTokenMetadata {
-    pub spec: String,
-    pub name: String,
-    pub symbol: String,
-    pub icon: Option<String>,
-    pub reference: Option<String>,
-    pub reference_hash: Option<Base64VecU8>,
-    pub decimals: u8,
-}
-
-impl FungibleTokenMetadata {
-    pub fn assert_valid(&self) {
-        require!(self.spec == FT_METADATA_SPEC);
-        require!(self.reference.is_some() == self.reference_hash.is_some());
-        if let Some(reference_hash) = &self.reference_hash {
-            require!(reference_hash.0.len() == 32, "Hash has to be 32 bytes");
-        }
-    }
-}
+use near_sdk::{env, ext_contract, near_bindgen, AccountId, Promise, PromiseResult};
 
 #[ext_contract(ext_ft_metadata)]
 trait FungibleTokenMetadataContract {
