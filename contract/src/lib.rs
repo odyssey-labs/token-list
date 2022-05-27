@@ -11,30 +11,48 @@
  *
  */
 
+use near_contract_standards::fungible_token::core::ext_ft_core;
+use near_contract_standards::fungible_token::metadata::FT_METADATA_SPEC;
 // To conserve gas, efficient serialization is achieved through Borsh (http://borsh.io/)
-use near_contract_standards::fungible_token::core_impl::ext_fungible_token;
-use near_contract_standards::fungible_token::metadata::FungibleTokenMetadata;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedSet;
-use near_sdk::json_types::U128;
+use near_sdk::json_types::{Base64VecU8, U128};
+use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::serde_json::from_slice;
-use near_sdk::{
-    env, ext_contract, near_bindgen, setup_alloc, AccountId, Gas, Promise, PromiseResult,
-};
+use near_sdk::{env, ext_contract, near_bindgen, require, AccountId, Promise, PromiseResult};
 
-const GAS_FOR_FT_CALL: Gas = 5_000_000_000_000;
+// TODO: Determine why I can't import FungibleTokenMetadata directly from near_contract_standards
+#[derive(BorshDeserialize, BorshSerialize, Clone, Deserialize, Serialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct FungibleTokenMetadata {
+    pub spec: String,
+    pub name: String,
+    pub symbol: String,
+    pub icon: Option<String>,
+    pub reference: Option<String>,
+    pub reference_hash: Option<Base64VecU8>,
+    pub decimals: u8,
+}
 
-setup_alloc!();
+impl FungibleTokenMetadata {
+    pub fn assert_valid(&self) {
+        require!(self.spec == FT_METADATA_SPEC);
+        require!(self.reference.is_some() == self.reference_hash.is_some());
+        if let Some(reference_hash) = &self.reference_hash {
+            require!(reference_hash.0.len() == 32, "Hash has to be 32 bytes");
+        }
+    }
+}
 
 #[ext_contract(ext_ft_metadata)]
-trait FungibleTokenMetadata: FungibleToken {
+trait FungibleTokenMetadataContract {
     fn ft_metadata(&self) -> FungibleTokenMetadata;
 }
 
 #[ext_contract(ext_self)]
-trait TokenList {
+trait TokenListCallbacks {
     fn verify_account_is_token_callback(&self) -> bool;
-    fn add_token_to_list_callback(&self, token: String) -> String;
+    fn add_token_to_list_callback(&self, token: AccountId) -> String;
 }
 
 // Structs in Rust are similar to other languages, and may include impl keyword as shown below
@@ -55,7 +73,7 @@ impl Default for TokenList {
 
 #[near_bindgen]
 impl TokenList {
-    pub fn add_token(&mut self, token: String) -> Promise {
+    pub fn add_token(&mut self, token: AccountId) -> Promise {
         self.add_token_to_list(token)
     }
 
@@ -72,7 +90,7 @@ impl TokenList {
         });
     }
 
-    pub fn get_tokens(&self, from_index: u64, limit: u64) -> Vec<String> {
+    pub fn get_tokens(&self, from_index: u64, limit: u64) -> Vec<AccountId> {
         let keys = self.tokens.as_vector();
         (from_index..std::cmp::min(from_index + limit, self.tokens.len()))
             .map(|index| keys.get(index).unwrap())
@@ -81,23 +99,16 @@ impl TokenList {
 
     fn add_token_to_list(&self, token: AccountId) -> Promise {
         self.verify_account_is_token(&token)
-            .then(ext_self::add_token_to_list_callback(
-                token,
-                &env::current_account_id(),
-                0,
-                GAS_FOR_FT_CALL,
-            ))
+            .then(ext_self::ext(env::current_account_id()).add_token_to_list_callback(token))
     }
 
     fn verify_account_is_token(&self, token: &AccountId) -> Promise {
+        env::log_str(&format!("Adding token '{}' to token list", token));
         let account_id: AccountId = env::signer_account_id();
-        ext_fungible_token::ft_balance_of(account_id.to_string(), token, 0, GAS_FOR_FT_CALL)
-            .and(ext_ft_metadata::ft_metadata(token, 0, GAS_FOR_FT_CALL))
-            .then(ext_self::verify_account_is_token_callback(
-                &env::current_account_id(),
-                0,
-                GAS_FOR_FT_CALL,
-            ))
+        ext_ft_core::ext(token.clone())
+            .ft_balance_of(account_id)
+            .and(ext_ft_metadata::ext(token.clone()).ft_metadata())
+            .then(ext_self::ext(env::current_account_id()).verify_account_is_token_callback())
     }
 
     #[private]
@@ -106,7 +117,7 @@ impl TokenList {
         let balance = match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
             PromiseResult::Failed => {
-                env::panic(b"Provided token address does not have a ft_balance_of method")
+                env::panic_str("Provided token address does not have a ft_balance_of method")
             }
             PromiseResult::Successful(result) => from_slice::<U128>(&result)
                 .expect("Unable to deserialize ft_balance_of into U128, invalid"),
@@ -115,7 +126,7 @@ impl TokenList {
         let metadata = match env::promise_result(1) {
             PromiseResult::NotReady => unreachable!(),
             PromiseResult::Failed => {
-                env::panic(b"Provided token address does not have a ft_metadata method")
+                env::panic_str("Provided token address does not have a ft_metadata method")
             }
             PromiseResult::Successful(result) => from_slice::<FungibleTokenMetadata>(&result)
                 .expect("Unable to deserialize ft_metadata, invalid"),
@@ -126,14 +137,14 @@ impl TokenList {
     }
 
     #[private]
-    pub fn add_token_to_list_callback(&mut self, token: String) {
+    pub fn add_token_to_list_callback(&mut self, token: AccountId) {
         assert_eq!(env::promise_results_count(), 1, "This is a callback method");
 
         // handle the result from the cross contract call this method is a callback for
         let is_token_account = match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
             PromiseResult::Failed => {
-                env::panic(b"Unable to get result of token account verification")
+                env::panic_str("Unable to get result of token account verification")
             }
             PromiseResult::Successful(result) => from_slice::<bool>(&result)
                 .expect("Unable to deserialize bool for is_token_account, invalid"),
@@ -158,49 +169,37 @@ impl TokenList {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use near_sdk::MockedBlockchain;
+    use near_primitives_core::config::ViewConfig;
+    use near_sdk::test_utils::VMContextBuilder;
     use near_sdk::{testing_env, VMContext};
 
     // mock the context for testing, notice "signer_account_id" that was accessed above from env::
-    fn get_context(input: Vec<u8>, is_view: bool) -> VMContext {
+    fn get_context(input: Vec<u8>, view_config: Option<ViewConfig>) -> VMContext {
         VMContext {
-            current_account_id: "alice_near".to_string(),
-            signer_account_id: "bob_near".to_string(),
-            signer_account_pk: vec![0, 1, 2],
-            predecessor_account_id: "carol_near".to_string(),
+            view_config,
             input,
-            block_index: 0,
-            block_timestamp: 0,
-            account_balance: 0,
-            account_locked_balance: 0,
-            storage_usage: 0,
-            attached_deposit: 0,
-            prepaid_gas: 10u64.pow(18),
-            random_seed: vec![0, 1, 2],
-            is_view,
-            output_data_receivers: vec![],
-            epoch_height: 19,
+            ..VMContextBuilder::new().context
         }
     }
 
     #[test]
     fn set_then_get_token() {
-        let context = get_context(vec![], false);
+        let context = get_context(vec![], None);
         testing_env!(context);
         let mut contract = TokenList::default();
-        let token = "wrap.near".to_string();
+        let token: AccountId = "wrap.near".parse().unwrap();
         contract.add_token(token.clone());
         assert_eq!(&token, contract.get_tokens(0, 1).get(0).unwrap());
     }
 
     #[test]
     fn set_then_get_tokens() {
-        let context = get_context(vec![], false);
+        let context = get_context(vec![], None);
         testing_env!(context);
         let mut contract = TokenList::default();
-        let tokens = vec![
-            "wrap.near".to_string(),
-            "meta-pool.sputnik2.testnet".to_string(),
+        let tokens: Vec<AccountId> = vec![
+            "wrap.near".parse().unwrap(),
+            "meta-pool.sputnik2.testnet".parse().unwrap(),
         ];
         contract.add_tokens(tokens.clone());
         assert_eq!(tokens, contract.get_tokens(0, 2));
