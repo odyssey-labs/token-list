@@ -93,7 +93,10 @@ impl TokenList {
 
     #[private]
     pub fn verify_account_is_token_callback(&self) -> bool {
-        assert_eq!(env::promise_results_count(), 2, "This is a callback method");
+        require!(
+            env::promise_results_count() == 2,
+            "Invalid number of promise results"
+        );
         let balance = match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
             PromiseResult::Failed => {
@@ -118,7 +121,10 @@ impl TokenList {
 
     #[private]
     pub fn add_token_to_list_callback(&mut self, token: AccountId) {
-        assert_eq!(env::promise_results_count(), 1, "This is a callback method");
+        require!(
+            env::promise_results_count() == 1,
+            "Invalid number of promise results"
+        );
 
         // handle the result from the cross contract call this method is a callback for
         let is_token_account = match env::promise_result(0) {
@@ -130,7 +136,10 @@ impl TokenList {
                 .expect("Unable to deserialize bool for is_token_account, invalid"),
         };
 
-        assert!(is_token_account);
+        require!(
+            is_token_account,
+            format!("The account {} is not a valid token account", token)
+        );
         self.tokens.insert(&token);
     }
 
