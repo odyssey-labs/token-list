@@ -18,7 +18,7 @@ use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedSet;
 use near_sdk::json_types::U128;
 use near_sdk::serde_json::from_slice;
-use near_sdk::{env, ext_contract, near_bindgen, AccountId, Promise, PromiseResult};
+use near_sdk::{env, ext_contract, near_bindgen, require, AccountId, Promise, PromiseResult};
 
 #[ext_contract(ext_ft_metadata)]
 trait FungibleTokenMetadataContract {
@@ -28,7 +28,8 @@ trait FungibleTokenMetadataContract {
 #[ext_contract(ext_self)]
 trait TokenListCallbacks {
     fn verify_account_is_token_callback(&self) -> bool;
-    fn add_token_to_list_callback(&self, token: AccountId) -> String;
+    fn add_token_to_list_callback(&self, token: &AccountId) -> String;
+    fn add_tokens_callback(&self, num_of_tokens: usize) -> usize;
 }
 
 // Structs in Rust are similar to other languages, and may include impl keyword as shown below
@@ -50,20 +51,23 @@ impl Default for TokenList {
 #[near_bindgen]
 impl TokenList {
     pub fn add_token(&mut self, token: AccountId) -> Promise {
-        self.add_token_to_list(token)
+        self.add_token_to_list(&token)
     }
 
-    // TODO: Use add_token for adding multiple tokens at once into the list
-    pub fn add_tokens(&mut self, tokens: Vec<AccountId>) {
-        // Use env::log to record logs permanently to the blockchain!
-        // env::log(format!("Adding tokens '{:?}' to token list", tokens));
+    // TODO: Figure out mut tokens warning
+    pub fn add_tokens(&mut self, mut tokens: Vec<AccountId>) -> Promise {
+        tokens.sort_unstable();
+        tokens.dedup();
+        let num_of_tokens = tokens.len();
+        require!(num_of_tokens.gt(&0), "No tokens provided");
 
-        // for token in tokens {
-        //     self.tokens.insert(&token);
-        // }
-        tokens.into_iter().for_each(|token| {
-            self.tokens.insert(&token);
-        });
+        // TODO: Avoid cross-contract call for tokens already in the list
+        let first_token = tokens.get(0).unwrap();
+        let mut promises = self.add_token_to_list(first_token);
+        for token in tokens.into_iter().skip(1) {
+            promises = promises.and(self.add_token_to_list(&token));
+        }
+        promises.then(ext_self::ext(env::current_account_id()).add_tokens_callback(num_of_tokens))
     }
 
     pub fn get_tokens(&self, from_index: u64, limit: u64) -> Vec<AccountId> {
@@ -73,8 +77,8 @@ impl TokenList {
             .collect()
     }
 
-    fn add_token_to_list(&self, token: AccountId) -> Promise {
-        self.verify_account_is_token(&token)
+    fn add_token_to_list(&self, token: &AccountId) -> Promise {
+        self.verify_account_is_token(token)
             .then(ext_self::ext(env::current_account_id()).add_token_to_list_callback(token))
     }
 
@@ -129,6 +133,12 @@ impl TokenList {
         assert!(is_token_account);
         self.tokens.insert(&token);
     }
+
+    #[private]
+    pub fn add_tokens_callback(&self, num_of_tokens: usize) -> usize {
+        env::log_str(&format!("Saved {} tokens to list", num_of_tokens));
+        num_of_tokens
+    }
 }
 
 /*
@@ -157,39 +167,4 @@ mod tests {
             ..VMContextBuilder::new().context
         }
     }
-
-    #[test]
-    fn set_then_get_token() {
-        let context = get_context(vec![], None);
-        testing_env!(context);
-        let mut contract = TokenList::default();
-        let token: AccountId = "wrap.near".parse().unwrap();
-        contract.add_token(token.clone());
-        assert_eq!(&token, contract.get_tokens(0, 1).get(0).unwrap());
-    }
-
-    #[test]
-    fn set_then_get_tokens() {
-        let context = get_context(vec![], None);
-        testing_env!(context);
-        let mut contract = TokenList::default();
-        let tokens: Vec<AccountId> = vec![
-            "wrap.near".parse().unwrap(),
-            "meta-pool.sputnik2.testnet".parse().unwrap(),
-        ];
-        contract.add_tokens(tokens.clone());
-        assert_eq!(tokens, contract.get_tokens(0, 2));
-    }
-
-    // #[test]
-    // fn get_default_greeting() {
-    //     let context = get_context(vec![], true);
-    //     testing_env!(context);
-    //     let contract = TokenList::default();
-    //     // this test did not call set_greeting so should return the default "Hello" greeting
-    //     assert_eq!(
-    //         "Hello".to_string(),
-    //         contract.get_greeting("francis.near".to_string())
-    //     );
-    // }
 }
