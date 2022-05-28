@@ -29,7 +29,7 @@ trait FungibleTokenMetadataContract {
 trait TokenListCallbacks {
     fn verify_account_is_token_callback(&self) -> bool;
     fn add_token_to_list_callback(&self, token: &AccountId) -> String;
-    fn add_tokens_callback(&self, num_of_tokens: usize) -> usize;
+    fn add_tokens_callback(&self, num_of_tokens: u64) -> u64;
 }
 
 // Structs in Rust are similar to other languages, and may include impl keyword as shown below
@@ -61,13 +61,17 @@ impl TokenList {
         let num_of_tokens = tokens.len();
         require!(num_of_tokens.gt(&0), "No tokens provided");
 
-        // TODO: Avoid cross-contract call for tokens already in the list
-        let first_token = tokens.get(0).unwrap();
-        let mut promises = self.add_token_to_list(first_token);
-        for token in tokens.into_iter().skip(1) {
-            promises = promises.and(self.add_token_to_list(&token));
-        }
-        promises.then(ext_self::ext(env::current_account_id()).add_tokens_callback(num_of_tokens))
+        let promises = tokens.into_iter().filter_map(|token| {
+            if !self.tokens.contains(&token) {
+                return Some(self.add_token_to_list(&token));
+            }
+            None
+        });
+        // TODO: Handle unwrap() failure more gracefully
+        promises.reduce(|accum, p| accum.and(p)).unwrap().then(
+            ext_self::ext(env::current_account_id())
+                .add_tokens_callback(env::promise_results_count()),
+        )
     }
 
     pub fn get_tokens(&self, from_index: u64, limit: u64) -> Vec<AccountId> {
@@ -144,7 +148,7 @@ impl TokenList {
     }
 
     #[private]
-    pub fn add_tokens_callback(&self, num_of_tokens: usize) -> usize {
+    pub fn add_tokens_callback(&self, num_of_tokens: u64) -> u64 {
         env::log_str(&format!("Saved {} tokens to list", num_of_tokens));
         num_of_tokens
     }
