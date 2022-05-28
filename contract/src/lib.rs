@@ -18,7 +18,9 @@ use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedSet;
 use near_sdk::json_types::U128;
 use near_sdk::serde_json::from_slice;
-use near_sdk::{env, ext_contract, near_bindgen, require, AccountId, Promise, PromiseResult};
+use near_sdk::{
+    env, ext_contract, near_bindgen, require, AccountId, Promise, PromiseOrValue, PromiseResult,
+};
 
 #[ext_contract(ext_ft_metadata)]
 trait FungibleTokenMetadataContract {
@@ -28,8 +30,8 @@ trait FungibleTokenMetadataContract {
 #[ext_contract(ext_self)]
 trait TokenListCallbacks {
     fn verify_account_is_token_callback(&self) -> bool;
-    fn add_token_to_list_callback(&self, token: &AccountId) -> String;
-    fn add_tokens_callback(&self, num_of_tokens: u64) -> u64;
+    fn add_token_to_list_callback(&self, token: &AccountId) -> bool;
+    fn add_tokens_callback(&self) -> u64;
 }
 
 // Structs in Rust are similar to other languages, and may include impl keyword as shown below
@@ -50,28 +52,33 @@ impl Default for TokenList {
 
 #[near_bindgen]
 impl TokenList {
-    pub fn add_token(&mut self, token: AccountId) -> Promise {
-        self.add_token_to_list(&token)
+    pub fn add_token(&mut self, token: AccountId) -> PromiseOrValue<bool> {
+        let token_promise = self.get_add_token_to_list_promise(&token);
+        if let Some(token_promise) = token_promise {
+            PromiseOrValue::Promise(token_promise)
+        } else {
+            PromiseOrValue::Value(false)
+        }
     }
 
     // TODO: Figure out mut tokens warning
-    pub fn add_tokens(&mut self, mut tokens: Vec<AccountId>) -> Promise {
+    pub fn add_tokens(&mut self, mut tokens: Vec<AccountId>) -> PromiseOrValue<u64> {
         tokens.sort_unstable();
         tokens.dedup();
         let num_of_tokens = tokens.len();
         require!(num_of_tokens.gt(&0), "No tokens provided");
 
-        let promises = tokens.into_iter().filter_map(|token| {
-            if !self.tokens.contains(&token) {
-                return Some(self.add_token_to_list(&token));
-            }
-            None
-        });
-        // TODO: Handle unwrap() failure more gracefully
-        promises.reduce(|accum, p| accum.and(p)).unwrap().then(
-            ext_self::ext(env::current_account_id())
-                .add_tokens_callback(env::promise_results_count()),
-        )
+        let promises = tokens
+            .into_iter()
+            .filter_map(|token| self.get_add_token_to_list_promise(&token))
+            .reduce(|accum, p| accum.and(p));
+        if let Some(promises) = promises {
+            PromiseOrValue::Promise(
+                promises.then(ext_self::ext(env::current_account_id()).add_tokens_callback()),
+            )
+        } else {
+            PromiseOrValue::Value(0)
+        }
     }
 
     pub fn get_tokens(&self, from_index: u64, limit: u64) -> Vec<AccountId> {
@@ -79,6 +86,14 @@ impl TokenList {
         (from_index..std::cmp::min(from_index + limit, self.tokens.len()))
             .map(|index| keys.get(index).unwrap())
             .collect()
+    }
+
+    fn get_add_token_to_list_promise(&self, token: &AccountId) -> Option<Promise> {
+        if !self.tokens.contains(&token) {
+            Some(self.add_token_to_list(&token))
+        } else {
+            None
+        }
     }
 
     fn add_token_to_list(&self, token: &AccountId) -> Promise {
@@ -124,7 +139,7 @@ impl TokenList {
     }
 
     #[private]
-    pub fn add_token_to_list_callback(&mut self, token: AccountId) {
+    pub fn add_token_to_list_callback(&mut self, token: AccountId) -> bool {
         require!(
             env::promise_results_count() == 1,
             "Invalid number of promise results"
@@ -145,10 +160,12 @@ impl TokenList {
             format!("The account {} is not a valid token account", token)
         );
         self.tokens.insert(&token);
+        true
     }
 
     #[private]
-    pub fn add_tokens_callback(&self, num_of_tokens: u64) -> u64 {
+    pub fn add_tokens_callback(&self) -> u64 {
+        let num_of_tokens = env::promise_results_count();
         env::log_str(&format!("Saved {} tokens to list", num_of_tokens));
         num_of_tokens
     }
