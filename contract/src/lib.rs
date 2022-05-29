@@ -27,13 +27,6 @@ trait FungibleTokenMetadataContract {
     fn ft_metadata(&self) -> FungibleTokenMetadata;
 }
 
-#[ext_contract(ext_self)]
-trait TokenListCallbacks {
-    fn verify_account_is_token_callback(&self) -> bool;
-    fn add_token_to_list_callback(&self, token: &AccountId) -> bool;
-    fn add_tokens_callback(&self) -> u64;
-}
-
 // Structs in Rust are similar to other languages, and may include impl keyword as shown below
 // Note: the names of the structs are not important when calling the smart contract, but the function names are
 #[near_bindgen]
@@ -74,7 +67,7 @@ impl TokenList {
             .reduce(|accum, p| accum.and(p));
         if let Some(promises) = promises {
             PromiseOrValue::Promise(
-                promises.then(ext_self::ext(env::current_account_id()).add_tokens_callback()),
+                promises.then(Self::ext(env::current_account_id()).add_tokens_callback()),
             )
         } else {
             PromiseOrValue::Value(0)
@@ -98,7 +91,7 @@ impl TokenList {
 
     fn add_token_to_list(&self, token: &AccountId) -> Promise {
         self.verify_account_is_token(token)
-            .then(ext_self::ext(env::current_account_id()).add_token_to_list_callback(token))
+            .then(Self::ext(env::current_account_id()).add_token_to_list_callback(token))
     }
 
     fn verify_account_is_token(&self, token: &AccountId) -> Promise {
@@ -107,7 +100,7 @@ impl TokenList {
         ext_ft_core::ext(token.clone())
             .ft_balance_of(account_id)
             .and(ext_ft_metadata::ext(token.clone()).ft_metadata())
-            .then(ext_self::ext(env::current_account_id()).verify_account_is_token_callback())
+            .then(Self::ext(env::current_account_id()).verify_account_is_token_callback())
     }
 
     #[private]
@@ -139,7 +132,7 @@ impl TokenList {
     }
 
     #[private]
-    pub fn add_token_to_list_callback(&mut self, token: AccountId) -> bool {
+    pub fn add_token_to_list_callback(&mut self, token: &AccountId) -> bool {
         require!(
             env::promise_results_count() == 1,
             "Invalid number of promise results"
