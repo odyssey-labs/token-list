@@ -190,4 +190,49 @@ mod tests {
             ..VMContextBuilder::new().context
         }
     }
+
+    #[test]
+    fn get_tokens() {
+        let context = get_context(vec![], None);
+        testing_env!(context);
+        let mut contract = TokenList::default();
+        let tokens: Vec<AccountId> = vec![
+            "linear-protocol.testnet".parse().unwrap(),
+            "wrap.testnet".parse().unwrap(),
+        ];
+        tokens.iter().for_each(|token| {
+            contract.tokens.insert(&token);
+        });
+        assert_eq!(tokens, contract.get_tokens(0, tokens.len() as u64));
+    }
+
+    #[test]
+    fn get_tokens_subset() {
+        let context = get_context(vec![], None);
+        testing_env!(context);
+        let mut contract = TokenList::default();
+        let tokens: Vec<AccountId> = vec![
+            "linear-protocol.testnet".parse().unwrap(),
+            "wrap.testnet".parse().unwrap(),
+        ];
+        tokens.iter().for_each(|token| {
+            contract.tokens.insert(&token);
+        });
+        assert_eq!(tokens[0..1], contract.get_tokens(0, 1));
+    }
+
+    #[test]
+    fn get_tokens_out_of_bounds_index() {
+        let context = get_context(vec![], None);
+        testing_env!(context);
+        let mut contract = TokenList::default();
+        let tokens: Vec<AccountId> = vec![
+            "linear-protocol.testnet".parse().unwrap(),
+            "wrap.testnet".parse().unwrap(),
+        ];
+        tokens.iter().for_each(|token| {
+            contract.tokens.insert(&token);
+        });
+        assert_eq!(vec![] as Vec<AccountId>, contract.get_tokens(1000, 1));
+    }
 }
