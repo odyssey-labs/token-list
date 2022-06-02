@@ -3,10 +3,8 @@ use near_contract_standards::fungible_token::metadata::FungibleTokenMetadata;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedSet;
 use near_sdk::json_types::U128;
-use near_sdk::serde_json::from_slice;
 use near_sdk::{
     env, ext_contract, near_bindgen, require, AccountId, Promise, PromiseError, PromiseOrValue,
-    PromiseResult,
 };
 
 #[ext_contract(ext_ft_metadata)]
@@ -103,23 +101,13 @@ impl TokenList {
     }
 
     #[private]
-    pub fn add_token_to_list_callback(&mut self, token: &AccountId) -> bool {
+    pub fn add_token_to_list_callback(
+        &mut self,
+        #[callback_result] is_token_account: Result<bool, PromiseError>,
+        token: &AccountId,
+    ) -> bool {
         require!(
-            env::promise_results_count() == 1,
-            "Invalid number of promise results"
-        );
-
-        let is_token_account = match env::promise_result(0) {
-            PromiseResult::NotReady => unreachable!(),
-            PromiseResult::Failed => {
-                env::panic_str("Unable to get result of token account verification")
-            }
-            PromiseResult::Successful(result) => from_slice::<bool>(&result)
-                .expect("Unable to deserialize bool for is_token_account, invalid"),
-        };
-
-        require!(
-            is_token_account,
+            is_token_account.expect("Unable to get result of token account verification"),
             format!("The account {} is not a valid token account", token)
         );
         self.tokens.insert(&token);
