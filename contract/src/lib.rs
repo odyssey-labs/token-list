@@ -115,7 +115,7 @@ impl TokenList {
     }
 
     #[private]
-    pub fn add_tokens_callback(&self) -> u64 {
+    pub fn add_tokens_callback() -> u64 {
         let num_of_tokens = env::promise_results_count();
         env::log_str(&format!("Saved {} tokens to list", num_of_tokens));
         num_of_tokens
