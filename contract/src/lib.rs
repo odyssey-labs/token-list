@@ -5,7 +5,8 @@ use near_sdk::collections::UnorderedSet;
 use near_sdk::json_types::U128;
 use near_sdk::serde_json::from_slice;
 use near_sdk::{
-    env, ext_contract, near_bindgen, require, AccountId, Promise, PromiseOrValue, PromiseResult,
+    env, ext_contract, near_bindgen, require, AccountId, Promise, PromiseError, PromiseOrValue,
+    PromiseResult,
 };
 
 #[ext_contract(ext_ft_metadata)]
@@ -88,31 +89,17 @@ impl TokenList {
     }
 
     #[private]
-    pub fn verify_account_is_token_callback(&self) -> bool {
-        require!(
-            env::promise_results_count() == 2,
-            "Invalid number of promise results"
-        );
-        let balance = match env::promise_result(0) {
-            PromiseResult::NotReady => unreachable!(),
-            PromiseResult::Failed => {
-                env::panic_str("Provided token address does not have a ft_balance_of method")
-            }
-            PromiseResult::Successful(result) => from_slice::<U128>(&result)
-                .expect("Unable to deserialize ft_balance_of into U128, invalid"),
-        };
-
-        let metadata = match env::promise_result(1) {
-            PromiseResult::NotReady => unreachable!(),
-            PromiseResult::Failed => {
-                env::panic_str("Provided token address does not have a ft_metadata method")
-            }
-            PromiseResult::Successful(result) => from_slice::<FungibleTokenMetadata>(&result)
-                .expect("Unable to deserialize ft_metadata, invalid"),
-        };
-
-        metadata.assert_valid();
-        balance.0 >= std::u128::MIN
+    pub fn verify_account_is_token_callback(
+        #[callback_result] balance: Result<U128, PromiseError>,
+        #[callback_result] metadata: Result<FungibleTokenMetadata, PromiseError>,
+    ) -> bool {
+        metadata
+            .expect("Provided token address does not have a ft_metadata method")
+            .assert_valid();
+        balance
+            .expect("Provided token address does not have a ft_metadata method")
+            .0
+            >= std::u128::MIN
     }
 
     #[private]
