@@ -1,6 +1,6 @@
 import { Contract, WalletConnection } from "near-api-js";
 import * as React from "react";
-import ReactDOM from "react-dom";
+import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { initContract } from "./utils";
 
@@ -25,6 +25,12 @@ declare global {
 
 window.nearInitPromise = initContract()
   .then(() => {
-    ReactDOM.render(<App />, document.querySelector("#root"));
+    const container = document.querySelector("#root");
+    if (container) {
+      const root = createRoot(container);
+      root.render(<App />);
+    } else {
+      throw new Error("Unable to find query selector at #root");
+    }
   })
   .catch(console.error);
