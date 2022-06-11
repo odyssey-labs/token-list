@@ -17,8 +17,8 @@ declare global {
         from_index: number;
         limit: number;
       }) => Promise<string[]>;
-      set_token: (tokenAccountId: string) => Promise<boolean>;
-      set_tokens: (tokenAccountIds: string[]) => Promise<number>;
+      add_token: ({ token }: { token: string }) => Promise<boolean>;
+      add_tokens: ({ tokens }: { tokens: string[] }) => Promise<number>;
     };
   }
 }

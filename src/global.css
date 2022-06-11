@@ -158,9 +158,6 @@ aside footer {
   justify-content: space-between;
   margin-top: 0.5em;
 }
-aside footer *:first-child {
-  color: var(--success);
-}
 aside footer *:last-child {
   color: var(--gray);
 }

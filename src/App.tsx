@@ -15,6 +15,9 @@ export function App() {
 
   // after submitting the form, we want to show Notification
   const [showNotification, setShowNotification] = React.useState(false);
+  const [isFailureNotification, setIsFailureNotification] =
+    React.useState(false);
+  const [notificationMessage, setNotificationMessage] = React.useState("");
 
   // The useEffect hook can be used to fire side-effects during render
   // Learn more: https://reactjs.org/docs/hooks-intro.html
@@ -70,15 +73,6 @@ export function App() {
       </button>
       <main>
         <h1>
-          <label
-            htmlFor="greeting"
-            style={{
-              color: "var(--secondary)",
-              borderBottom: "2px solid var(--secondary)",
-            }}
-          >
-            {greeting}
-          </label>
           {
             " " /* React trims whitespace around tags; insert literal space character when needed */
           }
@@ -91,45 +85,64 @@ export function App() {
             // get elements from the form using their id attribute
             // TODO: REMOVE IGNORE
             // @ts-ignore
-            const { fieldset, greeting } = event.target.elements;
+            const { fieldset, token } = event.target.elements;
 
             // hold onto new user-entered value from React's SynthenticEvent for use after `await` call
-            const newGreeting = greeting.value;
 
             // disable the form while the value gets updated on-chain
             fieldset.disabled = true;
 
             try {
-              // make an update call to the smart contract
-              // TODO: Remove ignore
-              // @ts-ignore
-              await window.contract.set_greeting({
-                // pass the value that the user entered in the greeting field
-                message: newGreeting,
+              await window.contract.add_token({
+                token: token.value,
               });
+              setNotificationMessage(`Added ${token.value} to the token list`);
+              setShowNotification(true);
+
+              // remove Notification again after css animation completes
+              // this allows it to be shown again next time the form is submitted
+              setTimeout(() => {
+                setNotificationMessage("");
+                setIsFailureNotification(false);
+                setShowNotification(false);
+              }, 11000);
             } catch (e) {
-              alert(
-                "Something went wrong! " +
-                  "Maybe you need to sign out and back in? " +
-                  "Check your browser console for more info."
-              );
-              throw e;
+              try {
+                debugger;
+                const jsonError = JSON.parse((e as Error).message);
+                const isNotTokenAccount =
+                  jsonError &&
+                  jsonError?.kind?.ExecutionError &&
+                  jsonError.kind.ExecutionError.includes(
+                    "Unable to get result of token account verification"
+                  );
+                if (isNotTokenAccount) {
+                  setNotificationMessage(
+                    "The provided address is not a token account"
+                  );
+                  setIsFailureNotification(true);
+                  setShowNotification(true);
+
+                  // remove Notification again after css animation completes
+                  // this allows it to be shown again next time the form is submitted
+                  setTimeout(() => {
+                    setNotificationMessage("");
+                    setIsFailureNotification(false);
+                    setShowNotification(false);
+                  }, 11000);
+                }
+              } catch (handleError) {
+                alert(
+                  "Something went wrong! " +
+                    "Maybe you need to sign out and back in? " +
+                    "Check your browser console for more info."
+                );
+                throw e;
+              }
             } finally {
               // re-enable the form, whether the call succeeded or failed
               fieldset.disabled = false;
             }
-
-            // update local `greeting` variable to match persisted value
-            set_greeting(newGreeting);
-
-            // show Notification
-            setShowNotification(true);
-
-            // remove Notification again after css animation completes
-            // this allows it to be shown again next time the form is submitted
-            setTimeout(() => {
-              setShowNotification(false);
-            }, 11000);
           }}
         >
           <fieldset id="fieldset">
@@ -141,21 +154,20 @@ export function App() {
                 marginBottom: "0.5em",
               }}
             >
-              Change greeting
+              Add New Token
             </label>
             <div style={{ display: "flex" }}>
               <input
                 autoComplete="off"
-                defaultValue={greeting}
-                id="greeting"
-                onChange={(e) => setButtonDisabled(e.target.value === greeting)}
+                id="token"
+                onChange={(e) => setButtonDisabled(e.target.value.length === 0)}
                 style={{ flex: 1 }}
               />
               <button
                 disabled={buttonDisabled}
                 style={{ borderRadius: "0 5px 5px 0" }}
               >
-                Save
+                Add
               </button>
             </div>
           </fieldset>
@@ -203,13 +215,24 @@ export function App() {
           .
         </p>
       </main>
-      {showNotification && <Notification />}
+      {showNotification && (
+        <Notification
+          failure={isFailureNotification}
+          message={notificationMessage}
+        />
+      )}
     </>
   );
 }
 
 // this component gets rendered by App after the form is submitted
-function Notification() {
+function Notification({
+  failure,
+  message,
+}: {
+  failure: boolean;
+  message: string;
+}) {
   const urlPrefix = `https://explorer.${networkId}.near.org/accounts`;
   return (
     <aside>
@@ -223,7 +246,7 @@ function Notification() {
       {
         " " /* React trims whitespace around tags; insert literal space character when needed */
       }
-      called method: 'set_greeting' in contract:{" "}
+      called method: 'add_token' in contract:{" "}
       <a
         target="_blank"
         rel="noreferrer"
@@ -231,8 +254,12 @@ function Notification() {
       >
         {window.contract.contractId}
       </a>
+      <br />
+      {message}
       <footer>
-        <div>✔ Succeeded</div>
+        <div style={{ color: failure ? "var(--primary)" : "var(--success)" }}>
+          {failure ? "✘ Failed" : "✔ Succeeded"}
+        </div>
         <div>Just now</div>
       </footer>
     </aside>
