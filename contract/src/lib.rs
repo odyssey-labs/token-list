@@ -7,6 +7,8 @@ use near_sdk::{
     env, ext_contract, near_bindgen, require, AccountId, Promise, PromiseError, PromiseOrValue,
 };
 
+// TODO: Use ext_ft_metadata from this PR when it lands in release
+//       https://github.com/near/near-sdk-rs/pull/836
 #[ext_contract(ext_ft_metadata)]
 trait FungibleTokenMetadataContract {
     fn ft_metadata(&self) -> FungibleTokenMetadata;
