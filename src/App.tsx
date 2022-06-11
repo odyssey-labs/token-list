@@ -1,93 +1,86 @@
 import "regenerator-runtime/runtime";
 import * as React from "react";
+import { useState, useEffect } from "react";
 import { login, logout } from "./utils";
 import "./global.css";
 
 import { getConfig } from "./config";
+import { FungibleTokenMetadata, Token } from "./Token";
+import pMap from "p-map";
 const { networkId } = getConfig(process.env.NODE_ENV || "development");
 
-export function App() {
-  // use React Hooks to store greeting in component state
-  const [greeting, set_greeting] = React.useState();
+export type TokenData = {
+  accountId: string;
+  balance: number | null;
+  metadata: FungibleTokenMetadata;
+};
 
-  // when the user has not yet interacted with the form, disable the button
-  const [buttonDisabled, setButtonDisabled] = React.useState(true);
-
-  // after submitting the form, we want to show Notification
-  const [showNotification, setShowNotification] = React.useState(false);
-  const [isFailureNotification, setIsFailureNotification] =
-    React.useState(false);
-  const [notificationMessage, setNotificationMessage] = React.useState("");
-
-  // The useEffect hook can be used to fire side-effects during render
-  // Learn more: https://reactjs.org/docs/hooks-intro.html
-  React.useEffect(
-    () => {
-      // in this case, we only care to query the contract when signed in
-      if (window.walletConnection.isSignedIn()) {
-        // window.contract is set by initContract in index.js
-        // window.contract
-        // TODO: Remove ignore
-        // @ts-ignore
-        // .get_greeting({ account_id: window.accountId })
-        // .then((greetingFromContract: any) => {
-        //   set_greeting(greetingFromContract);
-        // });
-      }
-    },
-
-    // The second argument to useEffect tells React when to re-run the effect
-    // Use an empty array to specify "only run on first render"
-    // This works because signing into NEAR Wallet reloads the page
-    []
-  );
-
-  // if not signed in, return early with sign-in prompt
-  if (!window.walletConnection.isSignedIn()) {
-    return (
-      <main>
-        <h1>Welcome to NEAR!</h1>
-        <p>
-          To make use of the NEAR blockchain, you need to sign in. The button
-          below will sign you in using NEAR Wallet.
-        </p>
-        <p>
-          By default, when your app runs in "development" mode, it connects to a
-          test network ("testnet") wallet. This works just like the main network
-          ("mainnet") wallet, but the NEAR Tokens on testnet aren't convertible
-          to other currencies – they're just for testing!
-        </p>
-        <p>Go ahead and click the button below to try it out:</p>
-        <p style={{ textAlign: "center", marginTop: "2.5em" }}>
-          <button onClick={login}>Sign in</button>
-        </p>
-      </main>
+const getTokenData = async (
+  accountId: string | undefined
+): Promise<TokenData[]> => {
+  // TODO: Handle pagination
+  const tokenAccountIds = await window.contract.get_tokens({
+    from_index: 0,
+    limit: 100,
+  });
+  return pMap(tokenAccountIds, async (tokenAccountId) => {
+    const tokenAccount = await window.walletConnection._near.account(
+      tokenAccountId
     );
-  }
+    const balance: number | null = accountId
+      ? await tokenAccount.viewFunction(tokenAccountId, "ft_balance_of", {
+          account_id: window.accountId,
+        })
+      : null;
+    const metadata: FungibleTokenMetadata = await tokenAccount.viewFunction(
+      tokenAccountId,
+      "ft_metadata"
+    );
+    return {
+      accountId: tokenAccountId,
+      balance,
+      metadata,
+    };
+  });
+};
+
+export function App() {
+  const [tokens, setTokens] = useState<TokenData[]>([]);
+
+  const [buttonDisabled, setButtonDisabled] = useState(true);
+
+  const [showNotification, setShowNotification] = useState(false);
+  const [isFailureNotification, setIsFailureNotification] = useState(false);
+  const [notificationMessage, setNotificationMessage] = useState("");
+
+  useEffect(() => {
+    getTokenData(window.accountId).then(setTokens);
+  }, []);
 
   return (
-    // use React Fragment, <>, to avoid wrapping elements in unnecessary divs
     <>
-      <button className="link" style={{ float: "right" }} onClick={logout}>
-        Sign out
-      </button>
+      <div style={{ display: "flex", float: "right" }}>
+        <p>{window.accountId}</p>
+        <button
+          className="link"
+          style={{
+            color: window.walletConnection.isSignedIn()
+              ? "var(--primary)"
+              : "var(--secondary)",
+          }}
+          onClick={window.walletConnection.isSignedIn() ? logout : login}
+        >
+          Sign {window.walletConnection.isSignedIn() ? "out" : "in"}
+        </button>
+      </div>
       <main>
-        <h1>
-          {
-            " " /* React trims whitespace around tags; insert literal space character when needed */
-          }
-          {window.accountId}!
-        </h1>
+        <h1>Token List</h1>
         <form
           onSubmit={async (event) => {
             event.preventDefault();
 
             // get elements from the form using their id attribute
-            // TODO: REMOVE IGNORE
-            // @ts-ignore
-            const { fieldset, token } = event.target.elements;
-
-            // hold onto new user-entered value from React's SynthenticEvent for use after `await` call
+            const { fieldset, token } = (event.target as any).elements;
 
             // disable the form while the value gets updated on-chain
             fieldset.disabled = true;
@@ -108,7 +101,6 @@ export function App() {
               }, 11000);
             } catch (e) {
               try {
-                debugger;
                 const jsonError = JSON.parse((e as Error).message);
                 const isNotTokenAccount =
                   jsonError &&
@@ -118,7 +110,7 @@ export function App() {
                   );
                 if (isNotTokenAccount) {
                   setNotificationMessage(
-                    "The provided address is not a token account"
+                    "The provided account ID does not contain a fungible token contract"
                   );
                   setIsFailureNotification(true);
                   setShowNotification(true);
@@ -142,6 +134,7 @@ export function App() {
             } finally {
               // re-enable the form, whether the call succeeded or failed
               fieldset.disabled = false;
+              getTokenData(window.accountId).then(setTokens);
             }
           }}
         >
@@ -172,48 +165,9 @@ export function App() {
             </div>
           </fieldset>
         </form>
-        <p>
-          Look at that! A Hello World app! This greeting is stored on the NEAR
-          blockchain. Check it out:
-        </p>
-        <ol>
-          <li>
-            Look in <code>src/App.js</code> and <code>src/utils.js</code> –
-            you'll see <code>get_greeting</code> and <code>set_greeting</code>{" "}
-            being called on <code>contract</code>. What's this?
-          </li>
-          <li>
-            Ultimately, this <code>contract</code> code is defined in{" "}
-            <code>assembly/main.ts</code> – this is the source code for your{" "}
-            <a
-              target="_blank"
-              rel="noreferrer"
-              href="https://docs.near.org/docs/develop/contracts/overview"
-            >
-              smart contract
-            </a>
-            .
-          </li>
-          <li>
-            When you run <code>yarn dev</code>, the code in{" "}
-            <code>assembly/main.ts</code> gets deployed to the NEAR testnet. You
-            can see how this happens by looking in <code>package.json</code> at
-            the <code>scripts</code> section to find the <code>dev</code>{" "}
-            command.
-          </li>
-        </ol>
-        <hr />
-        <p>
-          To keep learning, check out{" "}
-          <a target="_blank" rel="noreferrer" href="https://docs.near.org">
-            the NEAR docs
-          </a>{" "}
-          or look through some{" "}
-          <a target="_blank" rel="noreferrer" href="https://examples.near.org">
-            example apps
-          </a>
-          .
-        </p>
+        {tokens.map((data) => (
+          <Token key={data.accountId} {...data} />
+        ))}
       </main>
       {showNotification && (
         <Notification

@@ -21,6 +21,7 @@
     "@babel/preset-env": "~7.18.2",
     "@babel/preset-react": "~7.17.12",
     "@types/react": "^18.0.12",
+    "@types/react-collapse": "^5.0.1",
     "@types/react-dom": "^18.0.5",
     "babel-jest": "~28.1.1",
     "env-cmd": "~10.1.0",
@@ -36,7 +37,9 @@
   },
   "dependencies": {
     "near-api-js": "~0.45.1",
+    "p-map": "^5.5.0",
     "react": "~18.1.0",
+    "react-collapse": "^5.1.1",
     "react-dom": "~18.1.0",
     "regenerator-runtime": "~0.13.9"
   },
