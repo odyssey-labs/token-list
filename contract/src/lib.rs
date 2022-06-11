@@ -1,8 +1,8 @@
 use near_contract_standards::fungible_token::core::ext_ft_core;
 use near_contract_standards::fungible_token::metadata::FungibleTokenMetadata;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::collections::UnorderedSet;
 use near_sdk::json_types::U128;
+use near_sdk::store::UnorderedSet;
 use near_sdk::{
     env, ext_contract, near_bindgen, require, AccountId, Promise, PromiseError, PromiseOrValue,
 };
@@ -29,7 +29,7 @@ impl Default for TokenList {
 #[near_bindgen]
 impl TokenList {
     pub fn add_token(&mut self, token: AccountId) -> PromiseOrValue<bool> {
-        let token_promise = self.get_add_token_to_list_promise(&token);
+        let token_promise = self.get_add_token_to_list_promise(token);
         if let Some(token_promise) = token_promise {
             PromiseOrValue::Promise(token_promise)
         } else {
@@ -46,7 +46,7 @@ impl TokenList {
 
         let promises = tokens
             .into_iter()
-            .filter_map(|token| self.get_add_token_to_list_promise(&token))
+            .filter_map(|token| self.get_add_token_to_list_promise(token))
             .reduce(|accum, p| accum.and(p));
         if let Some(promises) = promises {
             PromiseOrValue::Promise(
@@ -57,23 +57,23 @@ impl TokenList {
         }
     }
 
-    pub fn get_tokens(&self, from_index: u64, limit: u64) -> Vec<AccountId> {
-        let keys = self.tokens.as_vector();
-        (from_index..std::cmp::min(from_index + limit, self.tokens.len()))
-            .map(|index| keys.get(index).unwrap())
+    pub fn get_tokens(&self, from_index: u64, limit: u64) -> Vec<&AccountId> {
+        let keys: Vec<&AccountId> = self.tokens.iter().collect();
+        (from_index..std::cmp::min(from_index + limit, self.tokens.len().into()))
+            .map(|index| *keys.get(index as usize).unwrap())
             .collect()
     }
 
-    fn get_add_token_to_list_promise(&self, token: &AccountId) -> Option<Promise> {
+    fn get_add_token_to_list_promise(&self, token: AccountId) -> Option<Promise> {
         if !self.tokens.contains(&token) {
-            Some(self.add_token_to_list(&token))
+            Some(self.add_token_to_list(token))
         } else {
             None
         }
     }
 
-    fn add_token_to_list(&self, token: &AccountId) -> Promise {
-        self.verify_account_is_token(token)
+    fn add_token_to_list(&self, token: AccountId) -> Promise {
+        self.verify_account_is_token(&token)
             .then(Self::ext(env::current_account_id()).add_token_to_list_callback(token))
     }
 
@@ -104,13 +104,13 @@ impl TokenList {
     pub fn add_token_to_list_callback(
         &mut self,
         #[callback_result] is_token_account: Result<bool, PromiseError>,
-        token: &AccountId,
+        token: AccountId,
     ) -> bool {
         require!(
             is_token_account.expect("Unable to get result of token account verification"),
             format!("The account {} is not a valid token account", token)
         );
-        self.tokens.insert(&token);
+        self.tokens.insert(token);
         true
     }
 
@@ -159,9 +159,12 @@ mod tests {
             "wrap.testnet".parse().unwrap(),
         ];
         tokens.iter().for_each(|token| {
-            contract.tokens.insert(&token);
+            contract.tokens.insert(token.clone());
         });
-        assert_eq!(tokens, contract.get_tokens(0, tokens.len() as u64));
+        assert_eq!(
+            vec![&tokens[0], &tokens[1]],
+            contract.get_tokens(0, tokens.len() as u64)
+        );
     }
 
     #[test]
@@ -174,9 +177,9 @@ mod tests {
             "wrap.testnet".parse().unwrap(),
         ];
         tokens.iter().for_each(|token| {
-            contract.tokens.insert(&token);
+            contract.tokens.insert(token.clone());
         });
-        assert_eq!(tokens[0..1], contract.get_tokens(0, 1));
+        assert_eq!(vec![&tokens[0]], contract.get_tokens(0, 1));
     }
 
     #[test]
@@ -189,8 +192,8 @@ mod tests {
             "wrap.testnet".parse().unwrap(),
         ];
         tokens.iter().for_each(|token| {
-            contract.tokens.insert(&token);
+            contract.tokens.insert(token.clone());
         });
-        assert_eq!(vec![] as Vec<AccountId>, contract.get_tokens(1000, 1));
+        assert_eq!(vec![] as Vec<&AccountId>, contract.get_tokens(1000, 1));
     }
 }
