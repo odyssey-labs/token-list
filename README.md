@@ -1,8 +1,15 @@
-token-list
+NEAR Token List
 ==================
 
-This [React] app was initialized with [create-near-app]
+The NEAR Token List is a smart contract deployed on NEAR that maintains a set of Fungible Token contract accounts in a list. This program exposes functions that allow for individual or bulk adding of tokens to the list by verifying contract metadata and balance functions are defined. Thi
 
+This repo was initialized with [create-near-app].
+
+Deployment
+==========
+## Testnet
+
+- Token List Contract: [`contract-hackathon.token-list.testnet`](https://explorer.testnet.near.org/accounts/contract-hackathon.token-list.testnet)
 
 Quick Start
 ===========
