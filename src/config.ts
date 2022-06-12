@@ -1,4 +1,5 @@
-const CONTRACT_NAME = process.env.CONTRACT_NAME || "token-list";
+const CONTRACT_NAME =
+  process.env.CONTRACT_NAME || "contract-hackathon.token-list.testnet";
 
 export function getConfig(env: any) {
   switch (env) {
