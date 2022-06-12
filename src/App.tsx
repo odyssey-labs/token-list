@@ -75,96 +75,106 @@ export function App() {
       </div>
       <main>
         <h1>Token List</h1>
-        <form
-          onSubmit={async (event) => {
-            event.preventDefault();
+        {window.walletConnection.isSignedIn() ? (
+          <form
+            onSubmit={async (event) => {
+              event.preventDefault();
 
-            // get elements from the form using their id attribute
-            const { fieldset, token } = (event.target as any).elements;
+              // get elements from the form using their id attribute
+              const { fieldset, token } = (event.target as any).elements;
 
-            // disable the form while the value gets updated on-chain
-            fieldset.disabled = true;
+              // disable the form while the value gets updated on-chain
+              fieldset.disabled = true;
 
-            try {
-              await window.contract.add_token({
-                token: token.value,
-              });
-              setNotificationMessage(`Added ${token.value} to the token list`);
-              setShowNotification(true);
-
-              // remove Notification again after css animation completes
-              // this allows it to be shown again next time the form is submitted
-              setTimeout(() => {
-                setNotificationMessage("");
-                setIsFailureNotification(false);
-                setShowNotification(false);
-              }, 11000);
-            } catch (e) {
               try {
-                const jsonError = JSON.parse((e as Error).message);
-                const isNotTokenAccount =
-                  jsonError &&
-                  jsonError?.kind?.ExecutionError &&
-                  jsonError.kind.ExecutionError.includes(
-                    "Unable to get result of token account verification"
-                  );
-                if (isNotTokenAccount) {
-                  setNotificationMessage(
-                    "The provided account ID does not contain a fungible token contract"
-                  );
-                  setIsFailureNotification(true);
-                  setShowNotification(true);
-
-                  // remove Notification again after css animation completes
-                  // this allows it to be shown again next time the form is submitted
-                  setTimeout(() => {
-                    setNotificationMessage("");
-                    setIsFailureNotification(false);
-                    setShowNotification(false);
-                  }, 11000);
-                }
-              } catch (handleError) {
-                alert(
-                  "Something went wrong! " +
-                    "Maybe you need to sign out and back in? " +
-                    "Check your browser console for more info."
+                await window.contract.add_token({
+                  token: token.value,
+                });
+                setNotificationMessage(
+                  `Added ${token.value} to the token list`
                 );
-                throw e;
+                setShowNotification(true);
+
+                // remove Notification again after css animation completes
+                // this allows it to be shown again next time the form is submitted
+                setTimeout(() => {
+                  setNotificationMessage("");
+                  setIsFailureNotification(false);
+                  setShowNotification(false);
+                }, 11000);
+              } catch (e) {
+                try {
+                  const jsonError = JSON.parse((e as Error).message);
+                  const isNotTokenAccount =
+                    jsonError &&
+                    jsonError?.kind?.ExecutionError &&
+                    jsonError.kind.ExecutionError.includes(
+                      "Unable to get result of token account verification"
+                    );
+                  if (isNotTokenAccount) {
+                    setNotificationMessage(
+                      "The provided account ID does not contain a fungible token contract"
+                    );
+                    setIsFailureNotification(true);
+                    setShowNotification(true);
+
+                    // remove Notification again after css animation completes
+                    // this allows it to be shown again next time the form is submitted
+                    setTimeout(() => {
+                      setNotificationMessage("");
+                      setIsFailureNotification(false);
+                      setShowNotification(false);
+                    }, 11000);
+                  }
+                } catch (handleError) {
+                  alert(
+                    "Something went wrong! " +
+                      "Maybe you need to sign out and back in? " +
+                      "Check your browser console for more info."
+                  );
+                  throw e;
+                }
+              } finally {
+                // re-enable the form, whether the call succeeded or failed
+                fieldset.disabled = false;
+                getTokenData(window.accountId).then(setTokens);
               }
-            } finally {
-              // re-enable the form, whether the call succeeded or failed
-              fieldset.disabled = false;
-              getTokenData(window.accountId).then(setTokens);
-            }
-          }}
-        >
-          <fieldset id="fieldset">
-            <label
-              htmlFor="greeting"
-              style={{
-                display: "block",
-                color: "var(--gray)",
-                marginBottom: "0.5em",
-              }}
-            >
-              Add New Token
-            </label>
-            <div style={{ display: "flex" }}>
-              <input
-                autoComplete="off"
-                id="token"
-                onChange={(e) => setButtonDisabled(e.target.value.length === 0)}
-                style={{ flex: 1 }}
-              />
-              <button
-                disabled={buttonDisabled}
-                style={{ borderRadius: "0 5px 5px 0" }}
+            }}
+          >
+            <fieldset id="fieldset">
+              <label
+                htmlFor="greeting"
+                style={{
+                  display: "block",
+                  color: "var(--gray)",
+                  marginBottom: "0.5em",
+                }}
               >
-                Add
-              </button>
-            </div>
-          </fieldset>
-        </form>
+                Add New Token
+              </label>
+              <div style={{ display: "flex" }}>
+                <input
+                  autoComplete="off"
+                  id="token"
+                  onChange={(e) =>
+                    setButtonDisabled(e.target.value.length === 0)
+                  }
+                  style={{ flex: 1 }}
+                />
+                <button
+                  disabled={buttonDisabled}
+                  style={{ borderRadius: "0 5px 5px 0" }}
+                >
+                  Add
+                </button>
+              </div>
+            </fieldset>
+          </form>
+        ) : (
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <h3>Sign in with your wallet to add a new token!</h3>
+          </div>
+        )}
         {tokens.map((data) => (
           <Token key={data.accountId} {...data} />
         ))}
