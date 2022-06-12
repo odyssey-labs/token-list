@@ -1,7 +1,7 @@
 NEAR Token List
 ==================
 
-The NEAR Token List is a smart contract deployed on NEAR that maintains a set of Fungible Token contract accounts in a list. This program exposes functions that allow for individual or bulk adding of tokens to the list by verifying contract metadata and balance functions are defined. Thi
+The NEAR Token List is a smart contract deployed on NEAR that maintains a set of Fungible Token contract accounts in a list. This program exposes functions that allow for individual or bulk adding of tokens to the list by verifying contract metadata and balance functions are defined.
 
 This repo was initialized with [create-near-app].
 
