@@ -6,7 +6,6 @@ import "./global.css";
 
 import { getConfig } from "./config";
 import { FungibleTokenMetadata, Token } from "./Token";
-import pMap from "p-map";
 const { networkId } = getConfig(process.env.NODE_ENV || "development");
 
 export type TokenData = {
@@ -23,25 +22,28 @@ const getTokenData = async (
     from_index: 0,
     limit: 100,
   });
-  return pMap(tokenAccountIds, async (tokenAccountId) => {
-    const tokenAccount = await window.walletConnection._near.account(
-      tokenAccountId
-    );
-    const balance: number | null = accountId
-      ? await tokenAccount.viewFunction(tokenAccountId, "ft_balance_of", {
-          account_id: window.accountId,
-        })
-      : null;
-    const metadata: FungibleTokenMetadata = await tokenAccount.viewFunction(
-      tokenAccountId,
-      "ft_metadata"
-    );
-    return {
-      accountId: tokenAccountId,
-      balance,
-      metadata,
-    };
-  });
+  // TODO: Integrate p-map to control concurrency
+  return Promise.all(
+    tokenAccountIds.map(async (tokenAccountId) => {
+      const tokenAccount = await window.walletConnection._near.account(
+        tokenAccountId
+      );
+      const balance: number | null = accountId
+        ? await tokenAccount.viewFunction(tokenAccountId, "ft_balance_of", {
+            account_id: window.accountId,
+          })
+        : null;
+      const metadata: FungibleTokenMetadata = await tokenAccount.viewFunction(
+        tokenAccountId,
+        "ft_metadata"
+      );
+      return {
+        accountId: tokenAccountId,
+        balance,
+        metadata,
+      };
+    })
+  );
 };
 
 export function App() {

@@ -37,7 +37,6 @@
   },
   "dependencies": {
     "near-api-js": "~0.45.1",
-    "p-map": "^5.5.0",
     "react": "~18.1.0",
     "react-collapse": "^5.1.1",
     "react-dom": "~18.1.0",
